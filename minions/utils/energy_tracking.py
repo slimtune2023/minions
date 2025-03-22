@@ -19,13 +19,15 @@ class PowerMonitor:
                 mode = "nvidia"
             elif self._is_mac():
                 mode = "mac"
+            elif self._is_linux():
+                mode = "linux"
             else:
                 raise ValueError(
-                    "Could not auto-detect monitoring mode. Please specify 'mac' or 'nvidia'."
+                    "Could not auto-detect monitoring mode. Please specify 'mac' or 'nvidia' or 'linux'."
                 )
 
-        if mode not in ["mac", "nvidia"]:
-            raise ValueError("Mode must be either 'mac', 'nvidia', or 'auto'.")
+        if mode not in ["mac", "nvidia", "linux"]:
+            raise ValueError("Mode must be either 'mac', 'nvidia', 'linux', or 'auto'.")
 
         self.mode = mode
         self.interval = interval
@@ -51,6 +53,10 @@ class PowerMonitor:
     def _is_mac(self):
         """Check if the system is a Mac."""
         return os.uname().sysname == "Darwin"
+
+    def _is_linux(self):
+        """Check if the system is a Mac."""
+        return os.uname().sysname == "Linux"
 
     def get_total_time(self):
         """Get the total time the monitor has been running."""
@@ -96,6 +102,7 @@ class PowerMonitor:
         while self.running:
             timestamp = time.time()
             measurement = None
+            measurement_time = 0
 
             if self.mode == "mac":
                 try:
@@ -118,6 +125,43 @@ class PowerMonitor:
                 except Exception as e:
                     measurement = {"error": str(e)}
 
+            elif self.mode == "linux":
+                try:
+                    measurement_time = self.interval / 3
+                    energy_before = subprocess.run(
+                        [
+                            "sudo",
+                            "cat",
+                            "/sys/class/powercap/intel-rapl:0/energy_uj"
+                        ],
+                        stdin=open("/dev/null", "r"),
+                        capture_output=True,
+                        text=True,
+                    )
+                    time.sleep(measurement_time)
+                    energy_after = subprocess.run(
+                        [
+                            "sudo",
+                            "cat",
+                            "/sys/class/powercap/intel-rapl:0/energy_uj"
+                        ],
+                        stdin=open("/dev/null", "r"),
+                        capture_output=True,
+                        text=True,
+                    )
+
+                    energy_before = energy_before.stdout
+                    energy_after = energy_after.stdout
+
+                    delta = (int(energy_after) - int(energy_before))
+                    if (delta < 0):
+                        measurement = {"error": "RAPL energy cycled"}
+                    else:
+                        power = delta / (1_000_000 * measurement_time)
+                        print(power)
+                        measurement = {"Power": power}
+                except Exception as e:
+                    measurement = {"error": str(e)}
             elif self.mode == "nvidia":
                 try:
                     result = subprocess.check_output(
@@ -148,7 +192,7 @@ class PowerMonitor:
                     measurement = {"error": str(e)}
 
             self.data.append((timestamp, measurement))
-            time.sleep(self.interval)
+            time.sleep(self.interval - measurement_time)
         self.end_time = time.time()
 
     def get_final_estimates(self):
@@ -177,6 +221,9 @@ class PowerMonitor:
 
             # Also track individual components for Mac
             component_keys = ["CPU Power", "GPU Power", "ANE Power"]
+        elif self.mode == "linux":
+            measurement_key = "Power" # calculated in W from RAPL energy measurements
+            conversion = 1.0
         elif self.mode == "nvidia":
             measurement_key = "GPU Power (avg)"  # in W from nvidia-smi
             conversion = 1.0
