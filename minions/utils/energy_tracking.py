@@ -158,7 +158,6 @@ class PowerMonitor:
                         measurement = {"error": "RAPL energy cycled"}
                     else:
                         power = delta / (1_000_000 * measurement_time)
-                        print(power)
                         measurement = {"Power": power}
                 except Exception as e:
                     measurement = {"error": str(e)}

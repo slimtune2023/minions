@@ -17,7 +17,7 @@ from minions.prompts.minion import (
     REFORMAT_QUERY_PROMPT,
 )
 from minions.usage import Usage
-
+from minions.utils.energy_tracking import PowerMonitor, cloud_inference_energy_estimate
 
 def _escape_newlines_in_strings(json_str: str) -> str:
     # This regex naively matches any content inside double quotes (including escaped quotes)
@@ -100,6 +100,10 @@ class Minion:
         Returns:
             Dict containing final_answer, conversation histories, and usage statistics
         """
+
+        # Setup and start power monitor
+        monitor = PowerMonitor(mode="auto", interval=1.0)
+        monitor.start()
 
         if max_rounds is None:
             max_rounds = self.max_rounds
@@ -408,6 +412,18 @@ class Minion:
         with open(log_path, "w", encoding="utf-8") as f:
             json.dump(conversation_log, f, indent=2, ensure_ascii=False)
 
+        # Stop tracking power
+        monitor.stop()
+
+        final_estimates = monitor.get_final_estimates()
+        
+        # remove units from measurement (assumed to be in W)
+        local_client_energy_measurement = float(final_estimates["Measured Energy"][:-2])
+
+        # Estimate energy consumption of workload done fully in cloud
+        local_tokens = local_usage.completion_tokens + local_usage.prompt_tokens
+        _, remote_energy_estimate, _ = cloud_inference_energy_estimate(tokens=local_tokens)
+        
         return {
             "final_answer": final_answer,
             "supervisor_messages": supervisor_messages,
@@ -415,4 +431,6 @@ class Minion:
             "remote_usage": remote_usage,
             "local_usage": local_usage,
             "log_file": log_path,
+            "remote_only_energy": remote_energy_estimate,
+            "local_client_energy": local_client_energy_measurement
         }
