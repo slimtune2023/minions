@@ -6,6 +6,9 @@ from datetime import datetime
 
 from minions.clients import OpenAIClient, TogetherClient
 
+from minions.usage import Usage
+from minions.utils.energy_tracking import PowerMonitor, cloud_inference_energy_estimate
+
 from minions.prompts.minion import (
     SUPERVISOR_CONVERSATION_PROMPT,
     SUPERVISOR_FINAL_PROMPT,
@@ -16,8 +19,7 @@ from minions.prompts.minion import (
     WORKER_PRIVACY_SHIELD_PROMPT,
     REFORMAT_QUERY_PROMPT,
 )
-from minions.usage import Usage
-from minions.utils.energy_tracking import PowerMonitor, cloud_inference_energy_estimate
+
 
 def _escape_newlines_in_strings(json_str: str) -> str:
     # This regex naively matches any content inside double quotes (including escaped quotes)
@@ -423,7 +425,7 @@ class Minion:
         # Estimate energy consumption of workload done fully in cloud
         local_tokens = local_usage.completion_tokens + local_usage.prompt_tokens
         _, remote_energy_estimate, _ = cloud_inference_energy_estimate(tokens=local_tokens)
-        
+
         return {
             "final_answer": final_answer,
             "supervisor_messages": supervisor_messages,

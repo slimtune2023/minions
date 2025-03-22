@@ -8,6 +8,7 @@ from rank_bm25 import BM25Plus
 import numpy as np
 
 from minions.usage import Usage
+from minions.utils.energy_tracking import PowerMonitor, cloud_inference_energy_estimate
 
 from minions.prompts.minions import (
     WORKER_PROMPT_TEMPLATE,
@@ -257,6 +258,10 @@ class Minions:
         Returns:
             Dict containing final_answer and conversation histories
         """
+
+        # Setup and start power monitor
+        monitor = PowerMonitor(mode="auto", interval=1.0)
+        monitor.start()
 
         self.max_rounds = max_rounds or self.max_rounds
 
@@ -732,10 +737,24 @@ class Minions:
                 f"Exhausted all rounds without finding a final answer. Returning the last synthesized response."
             )
             final_answer = "No answer found."
+        
+        # Stop tracking power
+        monitor.stop()
+
+        final_estimates = monitor.get_final_estimates()
+        
+        # remove units from measurement (assumed to be in W)
+        local_client_energy_measurement = float(final_estimates["Measured Energy"][:-2])
+
+        # Estimate energy consumption of workload done fully in cloud
+        local_tokens = local_usage.completion_tokens + local_usage.prompt_tokens
+        _, remote_energy_estimate, _ = cloud_inference_energy_estimate(tokens=local_tokens)
 
         return {
             "final_answer": final_answer,
             "meta": meta,
             "local_usage": local_usage,
             "remote_usage": remote_usage,
+            "remote_only_energy": remote_energy_estimate,
+            "local_client_energy": local_client_energy_measurement
         }
