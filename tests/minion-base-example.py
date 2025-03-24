@@ -20,7 +20,7 @@ Recent laboratory results show that his LDL cholesterol level is elevated at 170
 """
 
 context_summary = """
-John Doe, a 60-year-old male with hypertension, has elevated blood pressure (160/100 mmHg), occasional exertional chest discomfort, and high LDL cholesterol (170 mg/dL), while other metabolic indicators are normal.
+The context provides lab results for a patient John Doe
 """
 
 task = "Based on the patient's blood pressure and LDL cholesterol readings in the context, evaluate whether these factors together suggest an increased risk for cardiovascular complications."
