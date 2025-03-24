@@ -315,6 +315,77 @@ def cloud_inference_energy_estimate(
 
     return (effective_power, energy_watt_seconds, energy_watt_hours)
 
+def better_cloud_inference_energy_estimate(
+    input_tokens=0,
+    output_tokens=500,
+    model_attr=None,
+    gpu_attr=None
+):
+    """
+    Estimate energy consumption of a GPU inference task based on approximations from Epoch AI
+    (Taking into account difference in impact of input and output tokens)
+    https://epoch.ai/gradient-updates/how-much-energy-does-chatgpt-use#appendix
+    """
+    if model_attr is None:
+        # approximation for GPT-4o from scaling up 
+        model_attr = {
+            "num_active_params" : 100e9, # number of active parameters in the model (used during inference)
+            "hidden_dim" : 8448.42, # model dimension (size of hidden state = embedding size)
+            "attn_head_dim" : 150.1, # attention heads dimension
+            "num_attn_heads" : 57.0, # number of attention heads
+            "num_layers" : 77.0, # number of transformer blocks in model
+            "flops_per_tkn_factor" : 2,
+            "flops_per_tkn_factor_self_attn" : 4
+        }
+    
+    if gpu_attr is None:
+        gpu_attr = {
+            "peak_flops" : 9.89e14,
+            "gpu_prefill_util" : 0.5,
+            "gpu_decoding_util" : 0.1,
+            "power_rating" : 1500,
+            "power_prefill_util" : 1.0,
+            "power_decoding_util" : 0.75
+        }
+    
+    # peak GPU Joules per FLOP
+    peak_gpu_joules_per_flop = gpu_attr["power_rating"] / gpu_attr["peak_flops"]
+
+    # prefill stage calculations
+    prefill_flops = input_tokens * model_attr["flops_per_tkn_factor"] * model_attr["num_active_params"]
+    prefill_flops += (
+        (input_tokens ** 2)
+        * model_attr["flops_per_tkn_factor_self_attn"] * model_attr["num_attn_heads"]
+        * model_attr["attn_head_dim"] * model_attr["num_layers"]
+    )
+
+    prefill_energy_joules = (
+        prefill_flops
+        * (gpu_attr["power_prefill_util"] * peak_gpu_joules_per_flop)
+        / gpu_attr["gpu_prefill_util"]
+    )
+
+    # decoding stage calculations
+    decoding_mean_tokens = (input_tokens + (input_tokens + output_tokens - 1)) / 2
+    decoding_flops = output_tokens * model_attr["flops_per_tkn_factor"] * model_attr["num_active_params"]
+    decoding_flops += (
+        (decoding_mean_tokens * output_tokens)
+        * model_attr["flops_per_tkn_factor_self_attn"] * model_attr["num_attn_heads"]
+        * model_attr["attn_head_dim"] * model_attr["num_layers"]
+    )
+
+    decoding_energy_joules = (
+        decoding_flops
+        * (gpu_attr["power_decoding_util"] * peak_gpu_joules_per_flop)
+        / gpu_attr["gpu_decoding_util"]
+    )
+
+    return {
+        "prefill_energy_joules" : prefill_energy_joules,
+        "decoding_energy_joules" : decoding_energy_joules,
+        "total_energy_joules" : prefill_energy_joules + decoding_energy_joules
+    }
+
 
 class PowerMonitorContext:
     def __init__(self, mode="auto", interval=1.0):
