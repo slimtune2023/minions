@@ -339,6 +339,16 @@ def better_cloud_inference_energy_estimate(
         }
     
     if gpu_attr is None:
+        """
+        GPU utilization higher during prefill stage because of parallel processing of inputs
+        during decoding stage, new output tokens are generated sequentially with the auto-regressive function
+        (https://arxiv.org/pdf/2410.18038v1)
+
+        power utilization is very high during prefill stage (compute-heavy)
+        differs from less compute-intense decoding stage
+        (https://www.microsoft.com/en-us/research/uploads/prod/2024/03/GPU_Power_ASPLOS_24.pdf)
+        """
+
         gpu_attr = {
             "peak_flops" : 9.89e14,
             "gpu_prefill_util" : 0.5,
