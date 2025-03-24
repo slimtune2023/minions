@@ -9,7 +9,7 @@ class StructuredLocalOutput(BaseModel):
     answer: str | None
 
 local_client = OllamaClient(
-        model_name="llama3.2",
+        model_name="llama3.2:3b",
         temperature=0.0,
         structured_output_schema=StructuredLocalOutput
 )

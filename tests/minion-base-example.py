@@ -3,7 +3,7 @@ from minions.clients.openai import OpenAIClient
 from minions.minion import Minion
 
 local_client = OllamaClient(
-        model_name="llama3.2",
+        model_name="llama3.2:3b",
     )
 
 remote_client = OpenAIClient(
@@ -17,6 +17,10 @@ minion = Minion(local_client, remote_client)
 context = """
 Patient John Doe is a 60-year-old male with a history of hypertension. In his latest checkup, his blood pressure was recorded at 160/100 mmHg, and he reported occasional chest discomfort during physical activity.
 Recent laboratory results show that his LDL cholesterol level is elevated at 170 mg/dL, while his HDL remains within the normal range at 45 mg/dL. Other metabolic indicators, including fasting glucose and renal function, are unremarkable.
+"""
+
+context_summary = """
+John Doe, a 60-year-old male with hypertension, has elevated blood pressure (160/100 mmHg), occasional exertional chest discomfort, and high LDL cholesterol (170 mg/dL), while other metabolic indicators are normal.
 """
 
 task = "Based on the patient's blood pressure and LDL cholesterol readings in the context, evaluate whether these factors together suggest an increased risk for cardiovascular complications."

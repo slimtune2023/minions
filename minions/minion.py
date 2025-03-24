@@ -7,7 +7,8 @@ from datetime import datetime
 from minions.clients import OpenAIClient, TogetherClient
 
 from minions.usage import Usage
-from minions.utils.energy_tracking import PowerMonitor, cloud_inference_energy_estimate
+from minions.utils.energy_tracking import PowerMonitor
+from minions.utils.energy_tracking import cloud_inference_energy_estimate
 
 from minions.prompts.minion import (
     SUPERVISOR_CONVERSATION_PROMPT,
@@ -417,14 +418,26 @@ class Minion:
         # Stop tracking power
         monitor.stop()
 
-        final_estimates = monitor.get_final_estimates()
-        
-        # remove units from measurement (assumed to be in W)
-        local_client_energy_measurement = float(final_estimates["Measured Energy"][:-2])
+        # Local/remote input/output tokens
+        local_input_tokens = local_usage.prompt_tokens
+        local_output_tokens = local_usage.completion_tokens
+        remote_input_tokens = remote_usage.prompt_tokens
+        remote_output_tokens = remote_usage.completion_tokens
 
-        # Estimate energy consumption of workload done fully in cloud
-        local_tokens = local_usage.completion_tokens + local_usage.prompt_tokens
-        _, remote_energy_estimate, _ = cloud_inference_energy_estimate(tokens=local_tokens)
+        total_input_tokens = local_input_tokens + remote_input_tokens
+        total_output_tokens = local_output_tokens + remote_output_tokens
+
+        # Estimate remote-only energy consumption (remote processes all input/output tokens)
+        _, remote_only_energy, _ = cloud_inference_energy_estimate(
+            tokens=total_output_tokens+total_input_tokens
+        )
+
+        # Estimate minion energy consumption (including both remote and local energy consumption)
+        final_estimates = monitor.get_final_estimates()
+        minion_local_energy = float(final_estimates["Measured Energy"][:-2])
+        _, minion_remote_energy, _ = cloud_inference_energy_estimate(
+            tokens=remote_output_tokens+remote_input_tokens,
+        )
 
         return {
             "final_answer": final_answer,
@@ -433,6 +446,7 @@ class Minion:
             "remote_usage": remote_usage,
             "local_usage": local_usage,
             "log_file": log_path,
-            "remote_only_energy": remote_energy_estimate,
-            "local_client_energy": local_client_energy_measurement
+            "remote_only_energy": remote_only_energy,
+            "minion_local_energy": minion_local_energy,
+            "minion_remote_energy": minion_remote_energy
         }
