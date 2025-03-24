@@ -2,12 +2,12 @@ import time
 from datetime import datetime
 
 def read_energy():
-    """Read energy consumption from RAPL in microjoules (µJ)."""
+    # Read energy consumption from RAPL in microjoules (µJ).
     with open("/sys/class/powercap/intel-rapl:0/energy_uj", "r") as f:
         return int(f.read().strip())
 
 def get_power_usage(interval=0.5):
-    """Calculate power consumption in watts over a given time interval."""
+    # Calculate power consumption in watts over a given time interval.
     energy_start = read_energy()
     time.sleep(interval)
     energy_end = read_energy()

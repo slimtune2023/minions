@@ -335,7 +335,7 @@ def better_cloud_inference_energy_estimate(
             "num_attn_heads" : 57.0, # number of attention heads
             "num_layers" : 77.0, # number of transformer blocks in model
             "flops_per_tkn_factor" : 2,
-            "flops_per_tkn_factor_self_attn" : 4
+            "flops_per_tkn_factor_attn" : 4
         }
     
     if gpu_attr is None:
@@ -355,7 +355,7 @@ def better_cloud_inference_energy_estimate(
     prefill_flops = input_tokens * model_attr["flops_per_tkn_factor"] * model_attr["num_active_params"]
     prefill_flops += (
         (input_tokens ** 2)
-        * model_attr["flops_per_tkn_factor_self_attn"] * model_attr["num_attn_heads"]
+        * model_attr["flops_per_tkn_factor_attn"] * model_attr["num_attn_heads"]
         * model_attr["attn_head_dim"] * model_attr["num_layers"]
     )
 
@@ -370,7 +370,7 @@ def better_cloud_inference_energy_estimate(
     decoding_flops = output_tokens * model_attr["flops_per_tkn_factor"] * model_attr["num_active_params"]
     decoding_flops += (
         (decoding_mean_tokens * output_tokens)
-        * model_attr["flops_per_tkn_factor_self_attn"] * model_attr["num_attn_heads"]
+        * model_attr["flops_per_tkn_factor_attn"] * model_attr["num_attn_heads"]
         * model_attr["attn_head_dim"] * model_attr["num_layers"]
     )
 

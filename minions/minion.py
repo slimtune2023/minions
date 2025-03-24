@@ -8,7 +8,7 @@ from minions.clients import OpenAIClient, TogetherClient
 
 from minions.usage import Usage
 from minions.utils.energy_tracking import PowerMonitor
-from minions.utils.energy_tracking import cloud_inference_energy_estimate
+from minions.utils.energy_tracking import cloud_inference_energy_estimate, better_cloud_inference_energy_estimate
 
 from minions.prompts.minion import (
     SUPERVISOR_CONVERSATION_PROMPT,
@@ -145,6 +145,9 @@ class Minion:
         remote_usage = Usage()
         local_usage = Usage()
 
+        remote_usage_tokens = []
+        local_usage_tokens = []
+
         worker_messages = []
         supervisor_messages = []
 
@@ -168,6 +171,8 @@ class Minion:
                 messages=[{"role": "user", "content": reformat_query_task}]
             )
             local_usage += usage
+            local_usage_tokens.append((usage.prompt_tokens, usage.completion_tokens))
+
             pii_reformatted_task = reformatted_task[0]
 
             # Log the reformatted task
@@ -225,6 +230,8 @@ class Minion:
             )
 
         remote_usage += supervisor_usage
+        remote_usage_tokens.append((supervisor_usage.prompt_tokens, supervisor_usage.completion_tokens))
+        
         supervisor_messages.append(
             {"role": "assistant", "content": supervisor_response[0]}
         )
@@ -263,6 +270,7 @@ class Minion:
             )
 
             local_usage += worker_usage
+            local_usage_tokens.append((worker_usage.prompt_tokens, worker_usage.completion_tokens))
 
             if is_privacy:
                 if self.callback:
@@ -280,6 +288,7 @@ class Minion:
                     messages=[{"role": "user", "content": worker_privacy_shield_prompt}]
                 )
                 local_usage += worker_usage
+                local_usage_tokens.append((worker_usage.prompt_tokens, worker_usage.completion_tokens))
 
                 worker_messages.append(
                     {"role": "assistant", "content": worker_response[0]}
@@ -330,6 +339,7 @@ class Minion:
                 )
 
                 remote_usage += usage
+                remote_usage_tokens.append((usage.prompt_tokens, usage.completion_tokens))
 
                 supervisor_messages.append(
                     {"role": "assistant", "content": step_by_step_response[0]}
@@ -367,6 +377,7 @@ class Minion:
                 )
 
             remote_usage += supervisor_usage
+            remote_usage_tokens.append((supervisor_usage.prompt_tokens, supervisor_usage.completion_tokens))
             supervisor_messages.append(
                 {"role": "assistant", "content": supervisor_response[0]}
             )
@@ -418,26 +429,53 @@ class Minion:
         # Stop tracking power
         monitor.stop()
 
-        # Local/remote input/output tokens
-        local_input_tokens = local_usage.prompt_tokens
-        local_output_tokens = local_usage.completion_tokens
-        remote_input_tokens = remote_usage.prompt_tokens
-        remote_output_tokens = remote_usage.completion_tokens
-
-        total_input_tokens = local_input_tokens + remote_input_tokens
-        total_output_tokens = local_output_tokens + remote_output_tokens
-
-        # Estimate remote-only energy consumption (remote processes all input/output tokens)
-        _, remote_only_energy, _ = cloud_inference_energy_estimate(
-            tokens=total_output_tokens+total_input_tokens
-        )
-
-        # Estimate minion energy consumption (including both remote and local energy consumption)
+        # Estimate energy consumption over entire conversation/query
+        use_better_estimate = True
+        
+        # Estimate local minion energy consumption
         final_estimates = monitor.get_final_estimates()
         minion_local_energy = float(final_estimates["Measured Energy"][:-2])
-        _, minion_remote_energy, _ = cloud_inference_energy_estimate(
-            tokens=remote_output_tokens+remote_input_tokens,
-        )
+        
+        # Estimate remote energy consumption (minion and remote-only)
+        minion_remote_energy = None
+        remote_only_energy = None
+
+        if use_better_estimate:
+            minion_remote_energy = 0
+            for (input_tokens, output_tokens) in remote_usage_tokens:
+                estimate = better_cloud_inference_energy_estimate(
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens
+                )
+                minion_remote_energy += estimate["total_energy_joules"]
+            
+            remote_only_energy = minion_remote_energy
+            for (input_tokens, output_tokens) in local_usage_tokens:
+                estimate = better_cloud_inference_energy_estimate(
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens
+                )
+                remote_only_energy += estimate["total_energy_joules"]
+        
+        else:
+            # Local/remote input/output tokens
+            local_input_tokens = local_usage.prompt_tokens
+            local_output_tokens = local_usage.completion_tokens
+            remote_input_tokens = remote_usage.prompt_tokens
+            remote_output_tokens = remote_usage.completion_tokens
+
+            total_input_tokens = local_input_tokens + remote_input_tokens
+            total_output_tokens = local_output_tokens + remote_output_tokens
+
+            # Estimate remote-only energy consumption (remote processes all input/output tokens)
+            _, remote_only_energy, _ = cloud_inference_energy_estimate(
+                tokens=total_output_tokens+total_input_tokens
+            )
+
+            # Estimate minion energy consumption (including both remote and local energy consumption)
+            _, minion_remote_energy, _ = cloud_inference_energy_estimate(
+                tokens=remote_output_tokens+remote_input_tokens,
+            )
 
         return {
             "final_answer": final_answer,
