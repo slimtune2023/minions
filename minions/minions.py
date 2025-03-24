@@ -6,6 +6,7 @@ from pydantic import BaseModel, field_validator, Field
 from inspect import getsource
 from rank_bm25 import BM25Plus
 import numpy as np
+import os
 
 from minions.usage import Usage
 from minions.utils.energy_tracking import PowerMonitor
@@ -246,7 +247,8 @@ class Minions:
         num_tasks_per_round=3,
         num_samples_per_task=1,
         mcp_tools_info=None,
-        use_bm25=False,
+        use_bm25=True,
+        log_path=None,
     ):
         """Run the minions protocol to answer a task using local and remote models.
 
@@ -255,6 +257,7 @@ class Minions:
             doc_metadata: Type of document being analyzed
             context: List of context strings
             max_rounds: Override default max_rounds if provided
+            log_path: Optional path to save conversation logs
 
         Returns:
             Dict containing final_answer and conversation histories
@@ -763,7 +766,7 @@ class Minions:
             tokens=remote_output_tokens,
         )
 
-        return {
+        result = {
             "final_answer": final_answer,
             "meta": meta,
             "local_usage": local_usage,
@@ -772,3 +775,11 @@ class Minions:
             "minion_local_energy": minion_local_energy,
             "minion_remote_energy": minion_remote_energy
         }
+
+        # Save logs if path is provided
+        if log_path:
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            with open(log_path, 'w') as f:
+                json.dump(result, f, indent=2)
+
+        return result
