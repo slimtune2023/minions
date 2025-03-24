@@ -327,7 +327,8 @@ def better_cloud_inference_energy_estimate(
     https://epoch.ai/gradient-updates/how-much-energy-does-chatgpt-use#appendix
     """
     if model_attr is None:
-        # approximation for GPT-4o from scaling up 
+        # approximation for GPT-4o from scaling up Mixtral 8x22b model (open-source model with known architecture)
+        # should change if better approximations exist
         model_attr = {
             "num_active_params" : 100e9, # number of active parameters in the model (used during inference)
             "hidden_dim" : 8448.42, # model dimension (size of hidden state = embedding size)
@@ -349,6 +350,7 @@ def better_cloud_inference_energy_estimate(
         (https://www.microsoft.com/en-us/research/uploads/prod/2024/03/GPU_Power_ASPLOS_24.pdf)
         """
 
+        # estimates for H100 GPU
         gpu_attr = {
             "peak_flops" : 9.89e14,
             "gpu_prefill_util" : 0.5,
